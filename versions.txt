@@ -1,0 +1,15 @@
+ Requirements:                                                   Specification:
+ Operating System                                                Ubuntu Linux 18.04 (8 GB RAM)(64 bit)
+ Virtual machine 127.0.0.1                                        Ubuntu Linux 22.04 (2core, 8 GB RAM, 30 GB memory, 64 bit)
+ Ethereum Blockchain                                             Version 1.12.2                                         
+ cURLTool                                                        Version 7.74.0
+ Javascript                                                      1.8.5
+ Node JS                                                         18.17.1
+ NPM                                                             9.6.7
+ Hardhat                                                         2.12.0
+ VS Code                                                         1.78
+ Metamask                                                        10.25.0
+ Ethers library                                                  6.0.0
+ Solidity                                                        0.8.21
+ React JS                                                        18.2.0
+ 
