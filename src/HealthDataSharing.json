@@ -13,6 +13,25 @@
         "internalType": "address",
         "name": "familyMember",
         "type": "address"
+      }
+    ],
+    "name": "FamilyMemberAdded",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "patient",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "familyMember",
+        "type": "address"
       },
       {
         "indexed": false,
@@ -41,6 +60,25 @@
       }
     ],
     "name": "FamilyMemberRegistered",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "patient",
+        "type": "address"
+      },
+      {
+        "indexed": false,
+        "internalType": "address",
+        "name": "familyMember",
+        "type": "address"
+      }
+    ],
+    "name": "FamilyMemberRemoved",
     "type": "event"
   },
   {
@@ -392,6 +430,25 @@
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "patient",
+        "type": "address"
+      }
+    ],
+    "name": "getPrivacyScore",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "getTotalHealthcareExperts",
     "outputs": [
@@ -653,6 +710,19 @@
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "familyMember",
+        "type": "address"
+      }
+    ],
+    "name": "removeFamilyMember",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {

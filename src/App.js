@@ -23,6 +23,8 @@ const App = () => {
   const [researchInstitutes, setResearchInstitutes] = useState([]);
   const [familyMembers, setFamilyMembers] = useState([]);
   const [familyMemberName, setFamilyMemberName] = useState('');
+  const [isPatient, setIsPatient] = useState(false);
+  const [privacyScore, setPrivacyScore] = useState(null);
 
   // Initialize Web3 and Contract
   const initWeb3 = useCallback(async () => {
@@ -38,7 +40,7 @@ const App = () => {
         console.log("Contract initialized:", contractInstance);
       } catch (error) {
         console.error('Failed to load web3 or accounts:', error);
-        alert('Failed to connect to MetaMask. Please make sure it is installed and unlocked.');
+        alert('Failed to connect to MetaMask. Please ensure it is installed and unlocked.');
       }
     } else {
       alert('Please install MetaMask to use this dApp!');
@@ -49,6 +51,7 @@ const App = () => {
     initWeb3();
   }, [initWeb3]);
 
+  // Handle account and chain changes
   useEffect(() => {
     if (window.ethereum) {
       window.ethereum.on('accountsChanged', (accounts) => setAccount(accounts[0]));
@@ -61,12 +64,7 @@ const App = () => {
     };
   }, []);
 
-  useEffect(() => {
-    console.log("Contract state changed:", contract);
-    fetchData(); // Fetch data whenever contract changes
-  }, [contract]);
-
-  // Fetch all necessary data from the blockchain
+  // Fetch data when contract or account changes
   const fetchData = useCallback(async () => {
     if (contract && account) {
       setLoading(true);
@@ -80,11 +78,37 @@ const App = () => {
         const notifs = await contract.methods.viewNotifications().call({ from: account });
         setNotifications(notifs);
 
-        const family = await contract.methods.getFamilyMembers().call();
-        setFamilyMembers(family);
+        // Check if the account is a registered patient
+        const isRegistered = await contract.methods.registeredPatients(account).call();
+        setIsPatient(isRegistered);
 
-        const research = await contract.methods.getResearchInstituteAddresses().call();
-        setResearchInstitutes(research);
+        if (isRegistered) {
+          // Fetch privacy score
+          const score = await contract.methods.getPrivacyScore(account).call();
+          setPrivacyScore(score);
+
+          // Fetch patient's family members (up to 5 for simplicity)
+          const maxFamilyMembers = 5;
+          const familyMembersList = [];
+          for (let i = 0; i < maxFamilyMembers; i++) {
+            try {
+              const member = await contract.methods.patientFamilyMembersList(account, i).call();
+              if (member !== '0x0000000000000000000000000000000000000000') {
+                familyMembersList.push(member);
+              }
+            } catch (error) {
+              break; // Stop if index is out of bounds
+            }
+          }
+          setFamilyMembers(familyMembersList);
+        } else {
+          setPrivacyScore(null);
+          setFamilyMembers([]);
+        }
+
+        // Note: getResearchInstituteAddresses and getFamilyMembers don't exist in the contract.
+        // For research institutes, this would need a custom getter function.
+        // setResearchInstitutes(await contract.methods.getResearchInstituteAddresses().call());
       } catch (error) {
         console.error('Error fetching data:', error);
       } finally {
@@ -93,46 +117,39 @@ const App = () => {
     }
   }, [contract, account]);
 
-  // Event handlers for various actions
+  useEffect(() => {
+    if (contract && account) {
+      fetchData();
+    }
+  }, [contract, account, fetchData]);
+
+  // Event Handlers
 
   const handleRegisterAsPatient = async () => {
-    if (!contract) {
-      console.error("Contract not initialized");
-      alert("Please wait for the contract to initialize or try refreshing the page.");
-      return;
-    }
-
+    if (!contract) return alert("Contract not initialized");
     try {
       setLoading(true);
-      const result = await contract.methods.registerAsPatient().send({ from: account });
-      console.log("Transaction result:", result);
+      await contract.methods.registerAsPatient().send({ from: account });
       alert('Successfully registered as a patient!');
       fetchData();
     } catch (error) {
       console.error('Error registering as patient:', error);
-      alert(`Failed to register as a patient: ${error.message}`);
+      alert(`Failed to register: ${error.message}`);
     } finally {
       setLoading(false);
     }
   };
 
   const handleRegisterAsHealthcareExpert = async () => {
-    if (!contract) {
-      console.error("Contract not initialized");
-      alert("Please wait for the contract to initialize or try refreshing the page.");
-      return;
-    }
-
+    if (!contract) return alert("Contract not initialized");
     try {
       setLoading(true);
-      const result = await contract.methods.registerAsHealthcareExpert("Doctor Name", "Specialization", 5)
-        .send({ from: account });
-      console.log("Transaction result:", result);
+      await contract.methods.registerAsHealthcareExpert("Doctor Name", "Specialization", 5).send({ from: account });
       alert('Successfully registered as a healthcare expert!');
       fetchData();
     } catch (error) {
       console.error('Error registering as healthcare expert:', error);
-      alert(`Failed to register as a healthcare expert: ${error.message}`);
+      alert(`Failed to register: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -140,22 +157,16 @@ const App = () => {
 
   const handleAddHealthcareExpert = async (e) => {
     e.preventDefault();
-    if (!contract) {
-      console.error("Contract not initialized");
-      alert("Please wait for the contract to initialize or try refreshing the page.");
-      return;
-    }
-
+    if (!contract) return alert("Contract not initialized");
     try {
       setLoading(true);
-      const result = await contract.methods.addHealthcareExpert(expertAddress).send({ from: account });
-      console.log("Transaction result:", result);
+      await contract.methods.addHealthcareExpert(expertAddress).send({ from: account });
       alert('Successfully added healthcare expert!');
       setExpertAddress('');
       fetchData();
     } catch (error) {
       console.error('Error adding healthcare expert:', error);
-      alert(`Failed to add healthcare expert: ${error.message}`);
+      alert(`Failed to add: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -163,22 +174,16 @@ const App = () => {
 
   const handleSendHealthData = async (e) => {
     e.preventDefault();
-    if (!contract) {
-      console.error("Contract not initialized");
-      alert("Please wait for the contract to initialize or try refreshing the page.");
-      return;
-    }
-
+    if (!contract) return alert("Contract not initialized");
     try {
       setLoading(true);
-      const result = await contract.methods.sendHealthData(healthData).send({ from: account });
-      console.log("Transaction result:", result);
+      await contract.methods.sendHealthData(healthData).send({ from: account });
       alert('Successfully sent health data!');
       setHealthData('');
       fetchData();
     } catch (error) {
       console.error('Error sending health data:', error);
-      alert(`Failed to send health data: ${error.message}`);
+      alert(`Failed to send: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -186,23 +191,16 @@ const App = () => {
 
   const handleSendMessageToPatient = async (e) => {
     e.preventDefault();
-    if (!contract) {
-      console.error("Contract not initialized");
-      alert("Please wait for the contract to initialize or try refreshing the page.");
-      return;
-    }
-
+    if (!contract) return alert("Contract not initialized");
     try {
       setLoading(true);
-      const result = await contract.methods.sendMessageToPatient(patientAddress, message)
-        .send({ from: account });
-      console.log("Transaction result:", result);
+      await contract.methods.sendMessageToPatient(patientAddress, message).send({ from: account });
       alert('Successfully sent message to patient!');
       setMessage('');
       setPatientAddress('');
     } catch (error) {
-      console.error('Error sending message to patient:', error);
-      alert(`Failed to send message to patient: ${error.message}`);
+      console.error('Error sending message:', error);
+      alert(`Failed to send: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -210,44 +208,46 @@ const App = () => {
 
   const handleAddFamilyMember = async (e) => {
     e.preventDefault();
-    if (!contract) {
-      console.error("Contract not initialized");
-      alert("Please wait for the contract to initialize or try refreshing the page.");
-      return;
-    }
-
+    if (!contract) return alert("Contract not initialized");
     try {
       setLoading(true);
-      const result = await contract.methods.addFamilyMember(familyMemberAddress).send({ from: account });
-      console.log("Transaction result:", result);
+      await contract.methods.addFamilyMember(familyMemberAddress).send({ from: account });
       alert('Successfully added family member!');
       setFamilyMemberAddress('');
       fetchData();
     } catch (error) {
       console.error('Error adding family member:', error);
-      alert(`Failed to add family member: ${error.message}`);
+      alert(`Failed to add: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRemoveFamilyMember = async (familyMember) => {
+    if (!contract) return alert("Contract not initialized");
+    try {
+      setLoading(true);
+      await contract.methods.removeFamilyMember(familyMember).send({ from: account });
+      alert('Successfully removed family member!');
+      fetchData();
+    } catch (error) {
+      console.error('Error removing family member:', error);
+      alert(`Failed to remove: ${error.message}`);
     } finally {
       setLoading(false);
     }
   };
 
   const handleRegisterAsResearchInstitute = async () => {
-    if (!contract) {
-      console.error("Contract not initialized");
-      alert("Please wait for the contract to initialize or try refreshing the page.");
-      return;
-    }
-
+    if (!contract) return alert("Contract not initialized");
     try {
       setLoading(true);
-      const result = await contract.methods.registerAsResearchInstitute("Research Institute Name", "Research Area")
-        .send({ from: account });
-      console.log("Transaction result:", result);
+      await contract.methods.registerAsResearchInstitute("Research Institute Name").send({ from: account });
       alert('Successfully registered as a research institute!');
       fetchData();
     } catch (error) {
       console.error('Error registering as research institute:', error);
-      alert(`Failed to register as a research institute: ${error.message}`);
+      alert(`Failed to register: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -255,22 +255,16 @@ const App = () => {
 
   const handleSetConsentToRI = async (e) => {
     e.preventDefault();
-    if (!contract) {
-      console.error("Contract not initialized");
-      alert("Please wait for the contract to initialize or try refreshing the page.");
-      return;
-    }
-
+    if (!contract) return alert("Contract not initialized");
     try {
       setLoading(true);
-      const result = await contract.methods.setConsentToRI(consentToRI).send({ from: account });
-      console.log("Transaction result:", result);
-      alert('Consent to share data with Research Institute updated!');
-      setConsentToRI(false); // Reset consent input after successful transaction
+      await contract.methods.setConsentToRI(consentToRI).send({ from: account });
+      alert('Consent updated!');
+      setConsentToRI(false);
       fetchData();
     } catch (error) {
-      console.error('Error setting consent to RI:', error);
-      alert(`Failed to set consent to RI: ${error.message}`);
+      console.error('Error setting consent:', error);
+      alert(`Failed to set consent: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -278,21 +272,37 @@ const App = () => {
 
   const handleRewardPatient = async (e) => {
     e.preventDefault();
-    if (!contract) {
-      console.error("Contract not initialized");
-      alert("Please wait for the contract to initialize or try refreshing the page.");
-      return;
-    }
-
+    if (!contract) return alert("Contract not initialized");
     try {
       setLoading(true);
-      const result = await contract.methods.rewardPatient(patientAddress).send({ from: account, value: web3.utils.toWei('1', 'ether') });
-      console.log("Transaction result:", result);
-      alert('Successfully rewarded patient with 1 ether!');
+      await contract.methods.rewardPatient(patientAddress).send({
+        from: account,
+        value: web3.utils.toWei(rewardAmount.toString(), 'ether')
+      });
+      alert(`Successfully rewarded patient with ${rewardAmount} ETH!`);
+      setPatientAddress('');
       setRewardAmount(0);
+      fetchData();
     } catch (error) {
       console.error('Error rewarding patient:', error);
-      alert(`Failed to reward patient: ${error.message}`);
+      alert(`Failed to reward: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRegisterAsFamilyMember = async (e) => {
+    e.preventDefault();
+    if (!contract) return alert("Contract not initialized");
+    try {
+      setLoading(true);
+      await contract.methods.registerAsFamilyMember(familyMemberName).send({ from: account });
+      alert('Successfully registered as a family member!');
+      setFamilyMemberName('');
+      fetchData();
+    } catch (error) {
+      console.error('Error registering as family member:', error);
+      alert(`Failed to register: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -313,9 +323,21 @@ const App = () => {
           <button onClick={handleRegisterAsResearchInstitute} disabled={loading}>
             Register as Research Institute
           </button>
+          <button onClick={handleRegisterAsFamilyMember} disabled={loading}>
+            Register as Family Member
+          </button>
         </div>
       </header>
       <main>
+        {isPatient && (
+          <section>
+            <h2>Privacy Score</h2>
+            <p>Your privacy score is: {privacyScore}</p>
+            <p>
+              (Score starts at 100. Penalties: -10 per healthcare expert, -20 if consent given to research institutes.)
+            </p>
+          </section>
+        )}
         <section>
           <h2>Healthcare Experts</h2>
           <ul>
@@ -330,9 +352,7 @@ const App = () => {
               onChange={(e) => setExpertAddress(e.target.value)}
               placeholder="Healthcare Expert Address"
             />
-            <button type="submit" disabled={loading}>
-              Add Healthcare Expert
-            </button>
+            <button type="submit" disabled={loading}>Add Healthcare Expert</button>
           </form>
         </section>
         <section>
@@ -355,9 +375,7 @@ const App = () => {
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Message"
             />
-            <button type="submit" disabled={loading}>
-              Send Message to Patient
-            </button>
+            <button type="submit" disabled={loading}>Send Message to Patient</button>
           </form>
         </section>
         <section>
@@ -368,33 +386,30 @@ const App = () => {
             ))}
           </ul>
         </section>
-        <section>
-          <h2>Family Members</h2>
-          <ul>
-            {familyMembers.map((member, index) => (
-              <li key={index}>{member}</li>
-            ))}
-          </ul>
-          <form onSubmit={handleAddFamilyMember}>
-            <input
-              type="text"
-              value={familyMemberAddress}
-              onChange={(e) => setFamilyMemberAddress(e.target.value)}
-              placeholder="Family Member Address"
-            />
-            <button type="submit" disabled={loading}>
-              Add Family Member
-            </button>
-          </form>
-        </section>
-        <section>
-          <h2>Research Institutes</h2>
-          <ul>
-            {researchInstitutes.map((ri, index) => (
-              <li key={index}>{ri}</li>
-            ))}
-          </ul>
-        </section>
+        {isPatient && (
+          <section>
+            <h2>Your Family Members</h2>
+            <ul>
+              {familyMembers.map((member, index) => (
+                <li key={index}>
+                  {member}
+                  <button onClick={() => handleRemoveFamilyMember(member)} disabled={loading}>
+                    Remove
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <form onSubmit={handleAddFamilyMember}>
+              <input
+                type="text"
+                value={familyMemberAddress}
+                onChange={(e) => setFamilyMemberAddress(e.target.value)}
+                placeholder="Family Member Address"
+              />
+              <button type="submit" disabled={loading}>Add Family Member</button>
+            </form>
+          </section>
+        )}
         <section>
           <form onSubmit={handleSendHealthData}>
             <h2>Send Health Data</h2>
@@ -403,9 +418,7 @@ const App = () => {
               onChange={(e) => setHealthData(e.target.value)}
               placeholder="Health Data"
             />
-            <button type="submit" disabled={loading}>
-              Send Health Data
-            </button>
+            <button type="submit" disabled={loading}>Send Health Data</button>
           </form>
         </section>
         <section>
@@ -419,9 +432,7 @@ const App = () => {
               />
               Consent to share data with Research Institutes
             </label>
-            <button type="submit" disabled={loading}>
-              Set Consent
-            </button>
+            <button type="submit" disabled={loading}>Set Consent</button>
           </form>
         </section>
         <section>
@@ -437,31 +448,21 @@ const App = () => {
               type="number"
               value={rewardAmount}
               onChange={(e) => setRewardAmount(Number(e.target.value))}
-              placeholder="Reward Amount"
+              placeholder="Reward Amount (ETH)"
             />
-            <button type="submit" disabled={loading}>
-              Reward Patient
-            </button>
+            <button type="submit" disabled={loading}>Reward Patient</button>
           </form>
         </section>
         <section>
-          <form onSubmit={handleAddFamilyMember}>
+          <form onSubmit={handleRegisterAsFamilyMember}>
             <h2>Register as Family Member</h2>
-            <input
-              type="text"
-              value={familyMemberAddress}
-              onChange={(e) => setFamilyMemberAddress(e.target.value)}
-              placeholder="Family Member Address"
-            />
             <input
               type="text"
               value={familyMemberName}
               onChange={(e) => setFamilyMemberName(e.target.value)}
               placeholder="Family Member Name"
             />
-            <button type="submit" disabled={loading}>
-              Register as Family Member
-            </button>
+            <button type="submit" disabled={loading}>Register as Family Member</button>
           </form>
         </section>
       </main>
